@@ -1,0 +1,179 @@
+_schema-version: 3.3.0
+ID: gbicapmult2
+version: 1.0.0
+description: "A simple CAP project."
+parameters:
+  enable-parallel-deployments: true
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm ci
+        - npx cds build --production
+modules:
+  - name: gbicapmult2-srv
+    type: nodejs
+    path: gen/srv
+    parameters:
+      buildpack: nodejs_buildpack
+      readiness-health-check-type: http
+      readiness-health-check-http-endpoint: /health
+      memory: 256M
+      disk-quota: 512M
+    build-parameters:
+      builder: npm
+    provides:
+      - name: srv-api # required by consumers of CAP services (e.g. approuter)
+        properties:
+          srv-url: ${default-url}
+    requires:
+      - name: gbicapmult2-db
+      - name: gbicapmult2-auth
+      - name: gbicapmult2-sm
+      - name: gbicapmult2-destination
+      - name: jobscheduler
+
+  - name: gbicapmult2-db-deployer
+    type: hdb
+    path: gen/db
+    parameters:
+      buildpack: nodejs_buildpack
+    requires:
+      - name: gbicapmult2-db
+
+  - name: gbicapmult2-mtx
+    type: nodejs
+    path: gen/mtx/sidecar
+    build-parameters:
+      builder: npm-ci
+    parameters:
+      memory: 256M
+      disk-quota: 512M
+    provides:
+      - name: mtx-api
+        properties:
+          mtx-url: ${default-url}
+    requires:
+      - name: gbicapmult2-registry
+      - name: gbicapmult2-sm
+      - name: jobscheduler
+      - name: app-api
+        properties:
+          SUBSCRIPTION_URL: ~{app-protocol}://\${tenant_subdomain}-~{app-uri}
+      - name: gbicapmult2-auth
+      - name: gbicapmult2-destination
+
+  - name: gbicapmult2
+    type: approuter.nodejs
+    path: app/router
+    parameters:
+      keep-existing-routes: true
+      disk-quota: 256M
+      memory: 256M
+    requires:
+      - name: srv-api
+        group: destinations
+        properties:
+          name: srv-api # must be used in xs-app.json as well
+          url: ~{srv-url}
+          forwardAuthToken: true
+      - name: gbicapmult2-auth
+      - name: gbicapmult2-destination
+      - name: gbicapmult2-registry
+      - name: gbicapmult2-sm
+      - name: jobscheduler
+      - name: mtx-api
+        group: destinations
+        properties:
+          name: mtx-api # must be used in xs-app.json as well
+          url: ~{mtx-url}
+    provides:
+      - name: app-api
+        properties:
+          app-protocol: ${protocol}
+          app-uri: ${default-uri}
+    properties:
+      TENANT_HOST_PATTERN: "^(.*)-${default-uri}"
+      
+resources:
+  - name: gbicapmult2-db
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana
+      service-plan: hdi-shared
+  - name: gbicapmult2-auth
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: ./xs-security.json
+      config:
+        xsappname: gbicapmult2
+        tenant-mode: shared
+  - name: gbicapmult2-registry
+    type: org.cloudfoundry.managed-service
+    requires:
+      - name: mtx-api
+    parameters:
+      service: saas-registry
+      service-plan: application
+      config:
+        xsappname: gbicapmult2
+        appName: gbicapmult2
+        displayName: gbicapmult2
+        description: A simple CAP project.
+        category: 'Category'
+        appUrls:
+          getDependencies: ~{mtx-api/mtx-url}/-/cds/saas-provisioning/dependencies
+          onSubscription: ~{mtx-api/mtx-url}/-/cds/saas-provisioning/tenant/{tenantId}
+          onSubscriptionAsync: true
+          onUnSubscriptionAsync: true
+          onUpdateDependenciesAsync: true
+          callbackTimeoutMillis: 300000 # Increase if your deployments are taking longer than that
+
+  - name: gbicapmult2-sm
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: service-manager
+      service-plan: container
+
+  - name: gbicapmult2-destination
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite
+      config:
+        HTML5Runtime_enabled: true
+        init_data:
+          instance:
+            destinations:
+              - Authentication: NoAuthentication
+                Name: ui5
+                ProxyType: Internet
+                Type: HTTP
+                URL: https://ui5.sap.com
+              - Authentication: NoAuthentication
+                HTML5.DynamicDestination: true
+                HTML5.ForwardAuthToken: true
+                HTML5.Timeout: 900000
+                Name: gbicapmult2-srv-api
+                ProxyType: Internet
+                Type: HTTP
+                URL: ~{srv-api/srv-url}
+            existing_destinations_policy: update
+        version: 1.0.0
+    requires:
+      - name: srv-api
+
+  - name: jobscheduler
+    type: org.cloudfoundry.managed-service
+    parameters:
+        service: jobscheduler
+        # Use HANA XSA service-plan in the mta.yaml + override with deploy_cf_???.mtaext
+        # service-plan: default
+        # service-plan: lite      # minimum schedule frequency of an hour (for non-productive usage).
+        # service-plan: service   # allows 1000 Schedules with minimum schedule frequency of 5 minutes. To be used only for internal consumption.
+        service-plan: standard  # minimum schedule frequency of 5 minutes.
+        service-name: jobscheduler
+        config:
+          enable-xsuaa-support: true
