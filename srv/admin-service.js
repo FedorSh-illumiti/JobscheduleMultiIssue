@@ -38,7 +38,7 @@ module.exports = class AdminService extends cds.ApplicationService { init() {
     const token = req.headers?.authorization?.split(' ')[1];
 
     try {
-      const res = await getTenantToken(tenant,token);
+      const res = await doTokenExchange(req,token);
       console.log('res!!!!', res);
     } catch (error) {
       console.log('errror11!!!', error);
@@ -72,35 +72,65 @@ module.exports = class AdminService extends cds.ApplicationService { init() {
     return tokenResponse.data.access_token;
   };
 
-  // async function doTokenExchange(req,jwt, subdomain) {
+  async function doTokenExchange(req,jwt) {
 
-  //   console.log('JOB_CREDENTIALS!!!', myServiceBindings.myJobscheduler.uaa);
-  //   const getUserToken = async (jwt, myServiceBindings, subdomain) => {
-  //     return new Promise((resolve, reject) => {
-  //       xssec.requests.requestUserToken(
-  //         jwt,
-  //         myServiceBindings.myJobscheduler.uaa,
-  //         null,
-  //         null,
-  //         subdomain,
-  //         null,
-  //         (error, token) => {
-  //           if (error) {
-  //             return reject(error);
-  //           }
-  //           resolve(token);
-  //         }
-  //       );
-  //     });
-  //   };
+    const jwtDecoded = decode(jwt);
+    const consumerSubdomain = jwtDecoded.ext_attr.zdn;  
 
-  //   try {
-  //     return await getUserToken(jwt, myServiceBindings, subdomain);
-  //   } catch (error) {
-  //     console.log('error!!!!!!', error);
-  //   }
+    console.log('jwt:',jwt);
+    console.log('consumerSubdomain',consumerSubdomain);
 
-  // }
+    try {
+      const userToken = await xssec.v3.requests.requestUserToken(jwt,myServiceBindings.myJobscheduler.uaa,null,null,consumerSubdomain,jwtDecoded.ext_attr.zid,(err, exchangedToken) => {
+        if (err) {
+          console.error('Token exchange failed:', JSON.stringify(err));
+        } else {
+          console.log('New user token for target service:', exchangedToken);
+        }});
+    } catch (error) {
+      console.log('error:',error);
+    }
+
+
+    // const getUserToken = async (jwt, myServiceBindings) => {
+
+    //   return new Promise((resolve, reject) => {
+    //     console.log('JOB_CREDENTIALS!!!',  myServiceBindings.myJobscheduler.uaa);
+
+    //     xssec.v3.requests.requestUserToken(
+    //       jwt,
+    //       myServiceBindings.myJobscheduler.uaa,
+    //       null,
+    //       null,
+    //       consumerSubdomain,
+    //       null,
+    //       (error, token) => {
+    //         if (error) {
+    //           return reject(error);
+    //         }
+    //         resolve(token);
+    //       }
+    //     );
+    //   });
+    // };
+
+    // try {
+    //   return await getUserToken(jwt, myServiceBindings);
+    // } catch (error) {
+    //   console.log('error!!!!!!', JSON.stringify(error));
+    // }
+
+  }
+
+  function decode(jwtToken){
+
+    const jwtBase64Encoded = jwtToken.split('.')[1];
+
+    const jwtDecodedAsString = Buffer.from(jwtBase64Encoded, 'base64').toString('ascii');
+
+    return JSON.parse(jwtDecodedAsString);            
+
+}
 
   return super.init()
 }}
