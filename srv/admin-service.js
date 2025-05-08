@@ -4,6 +4,9 @@ const xssec = require('@sap/xssec')
 const xsenv = require('@sap/xsenv')
 const axios = require('axios');
 const { decodeJwt } = require('@sap/xssec');
+const VCAP_APP = JSON.parse(process.env.VCAP_APPLICATION)
+const APP_URI = VCAP_APP.application_uris[0]
+
 
 
 const myServiceBindings = xsenv.getServices({
@@ -38,47 +41,89 @@ module.exports = class AdminService extends cds.ApplicationService { init() {
     const token = req.headers?.authorization?.split(' ')[1];
 
     try {
-      const res = await doTokenExchange(req,token);
+      const exchangedToken = await doTokenExchange(req,token);
+      const result = await createJob(exchangedToken)   
+
       console.log('res!!!!', res);
     } catch (error) {
       console.log('errror11!!!', error);
     }
-    // try {
-    //   const exchangedToken = await doTokenExchange(req,token, tenant)// tenant-specific
-    //   console.log('exchangedToken', exchangedToken);
-    // } catch (error) {
-    //   console.log('error!!:', error);
-    // };
           
-
-    // const result = await createJob(exchangedToken)   
-
     return 'successful'
   })
 
-  const getTenantToken = async (tenant, userJwt) => {
-    const uaa = xsenv.getServices({ uaa: { tag: 'xsuaa' } }).uaa;
-    // const decoded = decodeJwt(userJwt);  
-    const tokenResponse = await axios({
-      method: 'post',
-      url: `${uaa.url}/oauth/token`,
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${uaa.clientid}:${uaa.clientsecret}`).toString('base64')}`,
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      data: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&response_type=token&client_id=${uaa.clientid}&assertion=${userJwt}`
-    });
+  async function  createJob(jwtToken) {
+    
+    const JobSchedulerClient = require('@sap/jobs-client');
+    const scheduler = new JobSchedulerClient.Scheduler({token: jwtToken});
+    var options = { 
+      job: { // mandatory property, required by jobscheduler client lib
+         name: `MuteteJob_${new Date().getMilliseconds()}`,
+         action: `https://${APP_URI}/odata/v4/Admin/Books`,          
+         active: true,
+         httpMethod: 'GET',
+         schedules: [{
+            time: 'now',
+            active: 'true'
+         }]   
+      } 
+   };
+
+    const res = await scheduler.createJob(options);
+
+
+    // return new Promise ((resolve, reject) => { 
+    //     debugger;
+    //    const JobSchedulerClient = require('@sap/jobs-client');
+    //    const scheduler = new JobSchedulerClient.Scheduler({token: jwtToken})          
+ 
+    //    var options = { 
+ 
+    //       job: { // mandatory property, required by jobscheduler client lib
+ 
+    //          name: `MuteteJob_${new Date().getMilliseconds()}`,
+ 
+    //          action: `https://${APP_URI}/odata/v4/Admin/Books`,          
+ 
+    //          active: true,
+ 
+    //          httpMethod: 'GET',
+ 
+    //          schedules: [{
+ 
+    //             time: 'now',
+ 
+    //             active: 'true'
+ 
+    //          }]   
+ 
+    //       } 
+ 
+    //    }
+ 
+       
+ 
+    //    scheduler.createJob(options, function (error, body) {
+ 
+    //       resolve({jobName: body.name, 
+ 
+    //                jobID: body._id
+ 
+    //       })   
+ 
+    //    })   
+ 
+    // })   
+ 
+ }
+
   
-    return tokenResponse.data.access_token;
-  };
 
   async function doTokenExchange(req,jwt) {
 
     const jwtDecoded = decode(jwt);
-    const consumerSubdomain = jwtDecoded.ext_attr.zdn;  
-
-    console.log('jwt:',jwt);
-    console.log('consumerSubdomain',consumerSubdomain);
+    const consumerSubdomain = jwtDecoded.ext_attr.zdn;
+    
 
     try {
       const userToken = await xssec.v3.requests.requestUserToken(jwt,myServiceBindings.myJobscheduler.uaa,null,null,consumerSubdomain,jwtDecoded.ext_attr.zid,(err, exchangedToken) => {
@@ -86,39 +131,12 @@ module.exports = class AdminService extends cds.ApplicationService { init() {
           console.error('Token exchange failed:', JSON.stringify(err));
         } else {
           console.log('New user token for target service:', exchangedToken);
+          return exchangedToken;
         }});
+      return userToken;
     } catch (error) {
       console.log('error:',error);
     }
-
-
-    // const getUserToken = async (jwt, myServiceBindings) => {
-
-    //   return new Promise((resolve, reject) => {
-    //     console.log('JOB_CREDENTIALS!!!',  myServiceBindings.myJobscheduler.uaa);
-
-    //     xssec.v3.requests.requestUserToken(
-    //       jwt,
-    //       myServiceBindings.myJobscheduler.uaa,
-    //       null,
-    //       null,
-    //       consumerSubdomain,
-    //       null,
-    //       (error, token) => {
-    //         if (error) {
-    //           return reject(error);
-    //         }
-    //         resolve(token);
-    //       }
-    //     );
-    //   });
-    // };
-
-    // try {
-    //   return await getUserToken(jwt, myServiceBindings);
-    // } catch (error) {
-    //   console.log('error!!!!!!', JSON.stringify(error));
-    // }
 
   }
 

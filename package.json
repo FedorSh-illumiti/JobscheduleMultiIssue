@@ -6,11 +6,12 @@
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
+    "@cap-js/hana": "^1",
     "@sap/cds": "^8",
     "@sap/cds-mtxs": "^2",
-    "express": "^4",
+    "@sap/jobs-client": "^1.8.6",
     "@sap/xssec": "^4",
-    "@cap-js/hana": "^1"
+    "express": "^4"
   },
   "devDependencies": {
     "@cap-js/cds-types": "^0.8.0",
@@ -19,7 +20,8 @@
   },
   "scripts": {
     "start": "cds-serve",
-    "undeploy": "cf undeploy gbicapmult2 --delete-services --delete-service-keys --delete-service-brokers"
+    "undeploy": "cf undeploy gbicapmult2 --delete-services --delete-service-keys --delete-service-brokers",
+    "debug-srv": "node debug-cf.js gbicapmult2-srv"
   },
   "sapux": [
     "app/admin-books",

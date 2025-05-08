@@ -81,7 +81,6 @@ modules:
       - name: gbicapmult2-destination
       - name: gbicapmult2-registry
       - name: gbicapmult2-sm
-      - name: jobscheduler
       - name: mtx-api
         group: destinations
         properties:

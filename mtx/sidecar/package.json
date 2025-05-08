@@ -21,7 +21,9 @@
         "vcap":{
           "label":"jobscheduler"
         },
-        "subscriptionDependency":"xsappname"
+        "subscriptionDependency":{
+          "uaa": "xsappname"
+        }
       }
     }
   }
