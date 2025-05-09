@@ -69,51 +69,7 @@ module.exports = class AdminService extends cds.ApplicationService { init() {
       } 
    };
 
-    const res = await scheduler.createJob(options);
-
-
-    // return new Promise ((resolve, reject) => { 
-    //     debugger;
-    //    const JobSchedulerClient = require('@sap/jobs-client');
-    //    const scheduler = new JobSchedulerClient.Scheduler({token: jwtToken})          
- 
-    //    var options = { 
- 
-    //       job: { // mandatory property, required by jobscheduler client lib
- 
-    //          name: `MuteteJob_${new Date().getMilliseconds()}`,
- 
-    //          action: `https://${APP_URI}/odata/v4/Admin/Books`,          
- 
-    //          active: true,
- 
-    //          httpMethod: 'GET',
- 
-    //          schedules: [{
- 
-    //             time: 'now',
- 
-    //             active: 'true'
- 
-    //          }]   
- 
-    //       } 
- 
-    //    }
- 
-       
- 
-    //    scheduler.createJob(options, function (error, body) {
- 
-    //       resolve({jobName: body.name, 
- 
-    //                jobID: body._id
- 
-    //       })   
- 
-    //    })   
- 
-    // })   
+    const res = await scheduler.createJob(options); 
  
  }
 
